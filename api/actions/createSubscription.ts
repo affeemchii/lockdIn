@@ -41,8 +41,8 @@ export const run = async ({ connections, logger }: CreateSubscriptionGlobalActio
                 }
             }
         }],
-        returnUrl: `https://lockdin--development.gadget.app/billing/confirm`,
-        test: true
+        returnUrl: `https://lockdin.gadget.app/billing/confirm`,
+        test: false
     });
 
     const { appSubscriptionCreate } = result;
