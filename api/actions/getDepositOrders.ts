@@ -1,78 +1,97 @@
+import { GetDepositOrdersGlobalActionContext } from "gadget-server";
+
 export const params = {};
 
-export const run: ActionRun = async ({ logger, api }) => {
+export const run = async ({ logger, connections }: GetDepositOrdersGlobalActionContext) => {
+  // We query Shopify GraphQL directly instead of Gadget DB.
+  // This works even without Protected Customer Data approval
+  // because we are querying from the backend with the app's
+  // access token — not from the storefront.
+  const shopify = connections.shopify.current;
+
+  if (!shopify) {
+    throw new Error("Shopify connection not found");
+  }
+
   try {
-    // Query ALL recent shopifyOrder records from Gadget DB
-    // We filter by lockdin-deposit tag in JavaScript after fetching
-    // because Gadget's JSON filter does not support string contains
-    // on JSON array fields like tags
-    const orders = await api.shopifyOrder.findMany({
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        financialStatus: true,
-        totalPrice: true,
-        totalOutstanding: true,
-        tags: true,
-        note: true,
-        email: true,
-        currency: true,
-      },
-      sort: { createdAt: "Descending" },
-      first: 250,
-    });
+    const result = await shopify.graphql(`
+      query getDepositOrders {
+        orders(first: 250, query: "tag:lockdin-deposit") {
+          edges {
+            node {
+              id
+              name
+              createdAt
+              displayFinancialStatus
+              totalPriceSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              totalOutstandingSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              tags
+              note
+              email
+              customer {
+                firstName
+                lastName
+                email
+              }
+            }
+          }
+        }
+      }
+    `);
 
-    logger.info({ totalFetched: orders.length }, "Fetched orders from Gadget DB");
+    const orders = result.orders?.edges ?? [];
 
-    // Filter in JavaScript for orders tagged with lockdin-deposit
-    // tags can be a string "tag1,tag2" or an array depending on
-    // how Gadget stores the Shopify tags field
-    const depositOrders = orders.filter((order: any) => {
-      const tags = order.tags;
-      if (!tags) return false;
-      if (Array.isArray(tags)) return tags.includes("lockdin-deposit");
-      if (typeof tags === "string") return tags.includes("lockdin-deposit");
-      return false;
-    });
-
-    logger.info({ count: depositOrders.length }, "Filtered lockdIn deposit orders");
+    logger.info({ totalFetched: orders.length }, "Fetched deposit orders from Shopify");
 
     // Format orders for the frontend
-    const formattedOrders = depositOrders.map((order: any) => {
-      const totalPrice = parseFloat(order.totalPrice || "0");
-      const totalOutstanding = parseFloat(order.totalOutstanding || "0");
+    const formattedOrders = orders.map(({ node: order }: any) => {
+      const totalPrice = parseFloat(order.totalPriceSet?.shopMoney?.amount || "0");
+      const totalOutstanding = parseFloat(order.totalOutstandingSet?.shopMoney?.amount || "0");
       const totalReceived = totalPrice - totalOutstanding;
+      const currencyCode = order.totalPriceSet?.shopMoney?.currencyCode || "USD";
 
-      // Check if balance already marked as collected
-      const tags = order.tags;
-      let balanceCollected = false;
-      if (Array.isArray(tags)) {
-        balanceCollected = tags.includes("lockdin-balance-collected");
-      } else if (typeof tags === "string") {
-        balanceCollected = tags.includes("lockdin-balance-collected");
-      }
+      const tags: string[] = order.tags || [];
+      const balanceCollected = tags.includes("lockdin-balance-collected");
+
+      const customerName = order.customer
+        ? `${order.customer.firstName || ""} ${order.customer.lastName || ""}`.trim()
+        : "Guest";
+
+      // Extract numeric ID from GID for markBalanceCollected action
+      // gid://shopify/Order/123456 → 123456
+      const numericId = order.id.replace("gid://shopify/Order/", "");
 
       return {
-        id: order.id,
-        gadgetId: order.id,
+        id: numericId,
+        gadgetId: numericId,
         orderNumber: order.name || "—",
         createdAt: order.createdAt,
-        customerEmail: order.email || "",
-        financialStatus: order.financialStatus || "",
-        totalPrice: totalPrice,
+        customerName,
+        customerEmail: order.customer?.email || order.email || "",
+        financialStatus: order.displayFinancialStatus || "",
+        totalPrice,
         totalReceived: totalReceived > 0 ? totalReceived : 0,
         remainingBalance: totalOutstanding > 0 ? totalOutstanding : 0,
-        currencyCode: order.currency || "USD",
-        balanceCollected: balanceCollected,
-        tags: tags || [],
+        currencyCode,
+        balanceCollected,
+        tags,
       };
     });
 
     return { orders: formattedOrders };
 
   } catch (err: any) {
-    logger.error({ error: err.message }, "Error fetching deposit orders from Gadget DB");
+    logger.error({ error: err.message }, "Error fetching deposit orders from Shopify");
     return { orders: [], error: err.message };
   }
 };

@@ -60,7 +60,3 @@ export const run = async ({ connections, logger }: CreateSubscriptionGlobalActio
     };
 };
 
-export const options = {
-    actionType: "custom" as const,
-    triggers: { api: true }
-};
