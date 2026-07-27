@@ -84,8 +84,6 @@ export const schema: GadgetModel = {
       },
       myshopifyDomain: true,
       name: true,
-      orderLineItems: true,
-      orders: true,
       passwordEnabled: { filterIndex: false, searchIndex: false },
       phone: { filterIndex: false },
       planDisplayName: true,

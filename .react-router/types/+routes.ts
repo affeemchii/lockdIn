@@ -17,6 +17,9 @@ type Pages = {
   "/app": {
     params: {};
   };
+  "/app/billing/confirm": {
+    params: {};
+  };
   "/app/integrations": {
     params: {};
   };
@@ -42,11 +45,11 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/app" | "/app/integrations" | "/app/analytics" | "/app/settings" | "/app/create" | "/app/orders" | "/*";
+    page: "/" | "/app" | "/app/billing/confirm" | "/app/integrations" | "/app/analytics" | "/app/settings" | "/app/create" | "/app/orders" | "/*";
   };
   "routes/_app.tsx": {
     id: "routes/_app";
-    page: "/" | "/app" | "/app/integrations" | "/app/analytics" | "/app/settings" | "/app/create" | "/app/orders";
+    page: "/" | "/app" | "/app/billing/confirm" | "/app/integrations" | "/app/analytics" | "/app/settings" | "/app/create" | "/app/orders";
   };
   "routes/_app._index.tsx": {
     id: "routes/_app._index";
@@ -54,7 +57,11 @@ type RouteFiles = {
   };
   "routes/_app.app.tsx": {
     id: "routes/_app.app";
-    page: "/app" | "/app/integrations" | "/app/analytics" | "/app/settings" | "/app/create" | "/app/orders";
+    page: "/app" | "/app/billing/confirm" | "/app/integrations" | "/app/analytics" | "/app/settings" | "/app/create" | "/app/orders";
+  };
+  "routes/_app.app.billing.confirm.tsx": {
+    id: "routes/_app.app.billing.confirm";
+    page: "/app/billing/confirm";
   };
   "routes/_app.app.integrations.tsx": {
     id: "routes/_app.app.integrations";
@@ -91,6 +98,7 @@ type RouteModules = {
   "routes/_app": typeof import("./web/routes/_app.tsx");
   "routes/_app._index": typeof import("./web/routes/_app._index.tsx");
   "routes/_app.app": typeof import("./web/routes/_app.app.tsx");
+  "routes/_app.app.billing.confirm": typeof import("./web/routes/_app.app.billing.confirm.tsx");
   "routes/_app.app.integrations": typeof import("./web/routes/_app.app.integrations.tsx");
   "routes/_app.app.analytics": typeof import("./web/routes/_app.app.analytics.tsx");
   "routes/_app.app.settings": typeof import("./web/routes/_app.app.settings.tsx");

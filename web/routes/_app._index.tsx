@@ -1,41 +1,39 @@
 import { useEffect } from "react";
-import { useNavigate, useSubmit, useActionData, useNavigation, useOutletContext } from "react-router";
+import { useActionData, useNavigate, useNavigation, useOutletContext, useSubmit } from "react-router";
 import type { Route } from "./+types/_app._index";
+
+const billingUnavailableMessage =
+  "Plan changes are currently unavailable for this app installation or distribution setup.";
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "";
+};
+
+const isBillingUnavailableError = (error: unknown) => {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes("billing api") &&
+    (
+      message.includes("cannot be used") ||
+      message.includes("not available") ||
+      message.includes("unavailable") ||
+      message.includes("not supported")
+    )
+  );
+};
 
 export const loader = async ({ context }: Route.LoaderArgs) => {
   const shopify = context.connections.shopify.current;
-  if (!shopify) {
-    return {
-      hasActivePlan: false,
-      hasRules: false,
-      shopId: null,
-    };
-  }
+  const currentShopId = context.connections.shopify.currentShopId?.toString();
 
-  // 1. Fetch active Shopify subscriptions to check for active paid plan
-  const billingResult = await shopify.graphql(`
-    query {
-      currentAppInstallation {
-        activeSubscriptions {
-          id
-          name
-          status
-        }
-      }
-    }
-  `);
-
-  const activeSubscriptions = billingResult?.currentAppInstallation?.activeSubscriptions || [];
-  const hasActivePlan = activeSubscriptions.some(
-    (sub: any) => sub.status === "ACTIVE"
-  );
-
-  // 2. Check if at least one depositRule record exists for the current shop
   const rules = await context.api.depositRule.findMany({
     filter: {
       shop: {
         id: {
-          equals: context.connections.shopify.currentShopId?.toString(),
+          equals: currentShopId,
         },
       },
     },
@@ -45,8 +43,45 @@ export const loader = async ({ context }: Route.LoaderArgs) => {
   });
   const hasRules = rules.length > 0;
 
-  // Redirect immediately if they have both plan and rules configured
-  if (hasActivePlan && hasRules) {
+  if (!shopify) {
+    return {
+      hasActivePlan: false,
+      hasRules,
+      shopId: null,
+      billingAvailable: false,
+      billingMessage: billingUnavailableMessage,
+    };
+  }
+
+  let hasActivePlan = false;
+  let billingAvailable = true;
+  let billingMessage: string | null = null;
+
+  try {
+    const billingResult = await shopify.graphql(`
+      query {
+        currentAppInstallation {
+          activeSubscriptions {
+            id
+            name
+            status
+          }
+        }
+      }
+    `);
+
+    const activeSubscriptions = billingResult?.currentAppInstallation?.activeSubscriptions || [];
+    hasActivePlan = activeSubscriptions.some((sub: { status?: string | null }) => sub.status === "ACTIVE");
+  } catch (error) {
+    if (isBillingUnavailableError(error)) {
+      billingAvailable = false;
+      billingMessage = billingUnavailableMessage;
+    } else {
+      throw error;
+    }
+  }
+
+  if (billingAvailable && hasActivePlan && hasRules) {
     throw new Response("", {
       status: 302,
       headers: { Location: "/app" },
@@ -57,6 +92,8 @@ export const loader = async ({ context }: Route.LoaderArgs) => {
     hasActivePlan,
     hasRules,
     shopId: context.connections.shopify.currentShopId,
+    billingAvailable,
+    billingMessage,
   };
 };
 
@@ -100,19 +137,39 @@ export const action = async ({ context, request }: Route.ActionArgs) => {
       }
     `;
 
-    const result = await shopify.graphql(CREATE_SUBSCRIPTION_QUERY, {
-      name: "Pro Growth",
-      price: 14.99,
-      returnUrl,
-    });
+    try {
+      const result = await shopify.graphql(CREATE_SUBSCRIPTION_QUERY, {
+        name: "Pro Growth",
+        price: 14.99,
+        returnUrl,
+      });
 
-    const userErrors = result?.appSubscriptionCreate?.userErrors || [];
-    if (userErrors.length > 0) {
-      throw new Error(userErrors.map((e: any) => e.message).join(", "));
+      const userErrors = result?.appSubscriptionCreate?.userErrors || [];
+      if (userErrors.length > 0) {
+        return {
+          success: false,
+          billingAvailable: true,
+          failureMessage: userErrors.map((e: { message?: string | null }) => e.message).filter(Boolean).join(", "),
+        };
+      }
+
+      const confirmationUrl = result?.appSubscriptionCreate?.confirmationUrl;
+      return { confirmationUrl, success: false, billingAvailable: true, failureMessage: null };
+    } catch (error) {
+      if (isBillingUnavailableError(error)) {
+        return {
+          success: false,
+          billingAvailable: false,
+          failureMessage: billingUnavailableMessage,
+        };
+      }
+
+      return {
+        success: false,
+        billingAvailable: true,
+        failureMessage: "We couldn't start the subscription upgrade right now. Please try again.",
+      };
     }
-
-    const confirmationUrl = result?.appSubscriptionCreate?.confirmationUrl;
-    return { confirmationUrl };
   }
 
   if (actionType === "downgrade") {
@@ -121,51 +178,70 @@ export const action = async ({ context, request }: Route.ActionArgs) => {
       throw new Error("Missing Shopify connection");
     }
 
-    // Get current active subscription
-    const billingResult = await shopify.graphql(`
-      query {
-        currentAppInstallation {
-          activeSubscriptions {
-            id
-            status
-          }
-        }
-      }
-    `);
-
-    const activeSubscriptions = billingResult?.currentAppInstallation?.activeSubscriptions || [];
-    const activeSub = activeSubscriptions.find((sub: any) => sub.status === "ACTIVE");
-
-    if (activeSub) {
-      const cancelResult = await shopify.graphql(`
-        mutation appSubscriptionCancel($id: ID!) {
-          appSubscriptionCancel(id: $id) {
-            appSubscription {
+    try {
+      const billingResult = await shopify.graphql(`
+        query {
+          currentAppInstallation {
+            activeSubscriptions {
               id
               status
             }
-            userErrors {
-              field
-              message
-            }
           }
         }
-      `, { id: activeSub.id });
+      `);
 
-      const userErrors = cancelResult?.appSubscriptionCancel?.userErrors || [];
-      if (userErrors.length > 0) {
-        throw new Error(userErrors.map((e: any) => e.message).join(", "));
+      const activeSubscriptions = billingResult?.currentAppInstallation?.activeSubscriptions || [];
+      const activeSub = activeSubscriptions.find((sub: { id?: string | null; status?: string | null }) => sub.status === "ACTIVE");
+
+      if (activeSub?.id) {
+        const cancelResult = await shopify.graphql(`
+          mutation appSubscriptionCancel($id: ID!) {
+            appSubscriptionCancel(id: $id) {
+              appSubscription {
+                id
+                status
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `, { id: activeSub.id });
+
+        const userErrors = cancelResult?.appSubscriptionCancel?.userErrors || [];
+        if (userErrors.length > 0) {
+          return {
+            success: false,
+            billingAvailable: true,
+            failureMessage: userErrors.map((e: { message?: string | null }) => e.message).filter(Boolean).join(", "),
+          };
+        }
       }
-    }
 
-    return { success: true };
+      return { success: true, billingAvailable: true, failureMessage: null };
+    } catch (error) {
+      if (isBillingUnavailableError(error)) {
+        return {
+          success: false,
+          billingAvailable: false,
+          failureMessage: billingUnavailableMessage,
+        };
+      }
+
+      return {
+        success: false,
+        billingAvailable: true,
+        failureMessage: "We couldn't update the subscription right now. Please try again.",
+      };
+    }
   }
 
   return null;
 };
 
 export default function Index({ loaderData }: Route.ComponentProps) {
-  const { hasActivePlan, hasRules } = loaderData;
+  const { hasActivePlan, hasRules, billingAvailable, billingMessage } = loaderData;
   const navigate = useNavigate();
   const submit = useSubmit();
   const actionData = useActionData<typeof action>();
@@ -175,13 +251,16 @@ export default function Index({ loaderData }: Route.ComponentProps) {
 
   const isUpgrading = navigation.state === "submitting" && navigation.formData?.get("actionType") === "upgrade";
   const isDowngrading = navigation.state === "submitting" && navigation.formData?.get("actionType") === "downgrade";
+  const actionFailureMessage = actionData && "failureMessage" in actionData ? actionData.failureMessage : null;
+  const billingUnavailableNotice =
+    !billingAvailable ? (billingMessage ?? billingUnavailableMessage) : actionData && "billingAvailable" in actionData && actionData.billingAvailable === false
+      ? (actionData.failureMessage ?? billingUnavailableMessage)
+      : null;
 
-  // Handle billing redirect breakout
   useEffect(() => {
-    if (actionData && (actionData as any).confirmationUrl) {
-      const url = (actionData as any).confirmationUrl;
-      window.open(url, "_top");
-    } else if (actionData && (actionData as any).success) {
+    if (actionData && "confirmationUrl" in actionData && actionData.confirmationUrl) {
+      window.open(actionData.confirmationUrl, "_top");
+    } else if (actionData && "success" in actionData && actionData.success) {
       window.location.reload();
     }
   }, [actionData]);
@@ -261,6 +340,24 @@ export default function Index({ loaderData }: Route.ComponentProps) {
         <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "16px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: "600", color: "#202223", margin: 0 }}>Select a Plan</h2>
 
+          {billingUnavailableNotice ? (
+            <s-banner
+              heading="Billing actions unavailable"
+              tone="warning"
+            >
+              {billingUnavailableNotice}
+            </s-banner>
+          ) : null}
+
+          {actionFailureMessage && (!("billingAvailable" in (actionData ?? {})) || actionData?.billingAvailable !== false) ? (
+            <s-banner
+              heading="Plan update failed"
+              tone="critical"
+            >
+              {actionFailureMessage}
+            </s-banner>
+          ) : null}
+
           <s-grid gridTemplateColumns="1fr 1fr" gap="base">
 
             {/* Plan 1: Starter */}
@@ -286,7 +383,7 @@ export default function Index({ loaderData }: Route.ComponentProps) {
 
                   <div style={{ marginTop: "16px" }}>
                     <s-button
-                      disabled={!hasActivePlan || isDowngrading}
+                      disabled={!billingAvailable || !hasActivePlan || isDowngrading}
                       onClick={handleDowngrade}
                       style={{ width: "100%" }}
                     >
@@ -328,7 +425,7 @@ export default function Index({ loaderData }: Route.ComponentProps) {
 
                   <div style={{ marginTop: "16px" }}>
                     <s-button
-                      disabled={hasActivePlan || isUpgrading}
+                      disabled={!billingAvailable || hasActivePlan || isUpgrading}
                       variant="primary"
                       onClick={handleUpgrade}
                       loading={isUpgrading}
