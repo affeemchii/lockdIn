@@ -3,26 +3,36 @@ import { api } from "../api";
 import { useBilling } from "../hooks/useBilling";
 import { UpgradeModal } from "../components/UpgradeModal";
 
-export default function OrdersPage() {
+type Order = {
+  id: string;
+  gadgetId: string;
+  orderNumber: string;
+  createdAt: string;
+  customerName: string;
+  customerEmail: string;
+  financialStatus: string;
+  totalPrice: number;
+  totalReceived: number;
+  remainingBalance: number;
+  currencyCode: string;
+  balanceCollected: boolean;
+  tags: string[];
+  productTitle: string;
+  sellingPlanName: string;
+  hasSellingPlan: boolean;
+  shopifyAdminUrl: string;
+};
 
-  // BILLING — check order limit on mount
+export default function OrdersPage() {
   const { billing, startUpgrade } = useBilling();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-
-  // orders: array of deposit orders fetched from Shopify
-  const [orders, setOrders] = useState<any[]>([]);
-
-  // loading: true while fetching orders
+  const [activeTab, setActiveTab] = useState<"pending" | "collected">("pending");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [collectedOrders, setCollectedOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // error: any error message to display
   const [error, setError] = useState<string | null>(null);
-
-  // collectingId: the order ID currently being marked as collected
-  // used to show loading state on the specific button
   const [collectingId, setCollectingId] = useState<string | null>(null);
 
-  // Fetch all deposit orders when page loads
   useEffect(() => {
     fetchOrders();
   }, []);
@@ -32,7 +42,8 @@ export default function OrdersPage() {
     setError(null);
     try {
       const result = await api.getDepositOrders();
-      setOrders(result.orders || []);
+      setOrders((result as any).orders || []);
+      setCollectedOrders((result as any).collectedOrders || []);
     } catch (err: any) {
       setError(err.message || "Failed to load orders");
     } finally {
@@ -40,18 +51,7 @@ export default function OrdersPage() {
     }
   }
 
-  // Called before allowing a new deposit order to be processed.
-  // If free merchant has hit 25 orders this month, show upgrade modal.
-  function checkOrderLimit(): boolean {
-    if (billing?.isOrderLimitHit) {
-      setShowUpgradeModal(true);
-      return false;
-    }
-    return true;
-  }
-
-  // Called when merchant clicks "Mark as Collected" on an order
-  async function handleMarkCollected(order: any) {
+  async function handleMarkCollected(order: Order) {
     setCollectingId(order.id);
     try {
       await api.markBalanceCollected({
@@ -60,7 +60,6 @@ export default function OrdersPage() {
         remainingBalance: order.remainingBalance,
         currencyCode: order.currencyCode,
       });
-      // Refresh orders list to show updated status
       await fetchOrders();
     } catch (err: any) {
       setError(err.message || "Failed to mark balance as collected");
@@ -69,7 +68,6 @@ export default function OrdersPage() {
     }
   }
 
-  // Format a number as currency string
   function formatMoney(amount: number, currency: string) {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -77,7 +75,6 @@ export default function OrdersPage() {
     }).format(amount);
   }
 
-  // Format ISO date string to readable date
   function formatDate(dateString: string) {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -86,21 +83,7 @@ export default function OrdersPage() {
     });
   }
 
-  // Get status badge color based on financial status
-  function getStatusColor(status: string, balanceCollected: boolean) {
-    if (balanceCollected) return "#1a7f37";
-    if (status === "PAID") return "#1a7f37";
-    if (status === "PARTIALLY_PAID") return "#b54708";
-    return "#6d7175";
-  }
-
-  // Get status label to show merchant
-  function getStatusLabel(status: string, balanceCollected: boolean) {
-    if (balanceCollected) return "Balance Collected";
-    if (status === "PARTIALLY_PAID") return "Deposit Paid — COD Pending";
-    if (status === "PAID") return "Fully Paid";
-    return status;
-  }
+  const currentOrders = activeTab === "pending" ? orders : collectedOrders;
 
   return (
     <s-page heading="Deposit Orders">
@@ -114,11 +97,78 @@ export default function OrdersPage() {
         startUpgrade={startUpgrade}
       />
 
-      <div style={{ margin: "0 0 20px 0", fontSize: "14px", color: "#6d7175" }}>
-        Orders where customers paid a deposit. Mark balance as collected after receiving COD payment.
+      {/* Tab bar */}
+      <div style={{
+        display: "flex",
+        borderBottom: "1px solid #e1e3e5",
+        marginBottom: "20px",
+      }}>
+        <button
+          onClick={() => setActiveTab("pending")}
+          style={{
+            padding: "10px 20px",
+            fontSize: "14px",
+            fontWeight: activeTab === "pending" ? "600" : "400",
+            color: activeTab === "pending" ? "#202223" : "#6d7175",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "pending" ? "2px solid #202223" : "2px solid transparent",
+            cursor: "pointer",
+            marginBottom: "-1px",
+          }}
+        >
+          {"Pending COD "}
+          <span style={{
+            marginLeft: "6px",
+            padding: "2px 8px",
+            borderRadius: "20px",
+            fontSize: "12px",
+            fontWeight: "600",
+            backgroundColor: orders.length > 0 ? "#fff4e5" : "#f1f2f3",
+            color: orders.length > 0 ? "#916a00" : "#6d7175",
+          }}>
+            {orders.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("collected")}
+          style={{
+            padding: "10px 20px",
+            fontSize: "14px",
+            fontWeight: activeTab === "collected" ? "600" : "400",
+            color: activeTab === "collected" ? "#202223" : "#6d7175",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "collected" ? "2px solid #202223" : "2px solid transparent",
+            cursor: "pointer",
+            marginBottom: "-1px",
+          }}
+        >
+          {"Collected "}
+          <span style={{
+            marginLeft: "6px",
+            padding: "2px 8px",
+            borderRadius: "20px",
+            fontSize: "12px",
+            fontWeight: "600",
+            backgroundColor: collectedOrders.length > 0 ? "#f0fdf4" : "#f1f2f3",
+            color: collectedOrders.length > 0 ? "#1a7f37" : "#6d7175",
+          }}>
+            {collectedOrders.length}
+          </span>
+        </button>
       </div>
 
-      {/* Order limit warning banner — shown when approaching or at limit */}
+      {/* Subtitle */}
+      <div style={{ marginBottom: "16px", fontSize: "14px", color: "#6d7175" }}>
+        {activeTab === "pending"
+          ? "Orders where customers paid a deposit. Mark balance as collected after receiving COD payment."
+          : "Orders where COD balance has been collected and marked as fully paid."
+        }
+      </div>
+
+      {/* Order limit warning banner */}
       {!billing?.isPro && billing && billing.monthlyOrderCount >= billing.FREE_ORDER_LIMIT * 0.8 && (
         <div style={{
           padding: "12px 16px",
@@ -173,35 +223,37 @@ export default function OrdersPage() {
       )}
 
       {/* Empty state */}
-      {!loading && orders.length === 0 && (
+      {!loading && currentOrders.length === 0 && (
         <s-card>
           <div style={{ padding: "60px 40px", textAlign: "center" }}>
-            <div style={{
-              fontSize: "40px",
-              marginBottom: "16px"
-            }}>📦</div>
+            <div style={{ fontSize: "40px", marginBottom: "16px" }}>
+              {activeTab === "pending" ? "📦" : "✅"}
+            </div>
             <div style={{
               fontSize: "16px",
               fontWeight: "600",
               color: "#202223",
-              marginBottom: "8px"
+              marginBottom: "8px",
             }}>
-              No deposit orders yet
+              {activeTab === "pending" ? "No pending COD orders" : "No collected orders yet"}
             </div>
             <div style={{ fontSize: "14px", color: "#6d7175" }}>
-              When customers place orders using your deposit purchase options, they will appear here.
+              {activeTab === "pending"
+                ? "When customers place deposit orders, they will appear here for COD collection."
+                : "Orders you have marked as collected will appear here."
+              }
             </div>
           </div>
         </s-card>
       )}
 
-      {/* Orders list */}
-      {!loading && orders.length > 0 && (
+      {/* Orders table */}
+      {!loading && currentOrders.length > 0 && (
         <s-card>
           {/* Table header */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1.5fr 1fr 1fr 1fr 1.5fr 1fr",
+            gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr 1fr 1.5fr 1fr",
             gap: "12px",
             padding: "12px 16px",
             borderBottom: "1px solid #e1e3e5",
@@ -214,19 +266,19 @@ export default function OrdersPage() {
             <div>Order</div>
             <div>Customer</div>
             <div>Date</div>
-            <div>Deposit Paid</div>
-            <div>Balance Due</div>
+            <div>{activeTab === "pending" ? "Deposit Paid" : "Total Paid"}</div>
+            <div>{activeTab === "pending" ? "Balance Due" : "Order Total"}</div>
             <div>Status</div>
             <div>Action</div>
           </div>
 
           {/* Order rows */}
-          {orders.map((order) => (
+          {currentOrders.map((order) => (
             <div
               key={order.id}
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1.5fr 1fr 1fr 1fr 1.5fr 1fr",
+                gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr 1fr 1.5fr 1fr",
                 gap: "12px",
                 padding: "16px",
                 borderBottom: "1px solid #f1f2f3",
@@ -234,12 +286,10 @@ export default function OrdersPage() {
                 fontSize: "14px",
               }}
             >
-              {/* Order number */}
               <div style={{ fontWeight: "600", color: "#202223" }}>
                 {order.orderNumber}
               </div>
 
-              {/* Customer info */}
               <div>
                 <div style={{ fontWeight: "500", color: "#202223" }}>
                   {order.customerName}
@@ -249,45 +299,56 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Date */}
               <div style={{ color: "#6d7175" }}>
                 {formatDate(order.createdAt)}
               </div>
 
-              {/* Deposit amount paid */}
               <div style={{ fontWeight: "600", color: "#1a7f37" }}>
                 {formatMoney(order.totalReceived, order.currencyCode)}
               </div>
 
-              {/* Remaining balance */}
               <div style={{
                 fontWeight: "600",
-                color: order.balanceCollected ? "#6d7175" : "#b54708"
+                color: activeTab === "collected" ? "#6d7175" : "#b54708",
               }}>
-                {order.balanceCollected
-                  ? "—"
+                {activeTab === "collected"
+                  ? formatMoney(order.totalPrice, order.currencyCode)
                   : formatMoney(order.remainingBalance, order.currencyCode)
                 }
               </div>
 
-              {/* Status badge */}
               <div>
-                <span style={{
-                  display: "inline-block",
-                  padding: "3px 10px",
-                  borderRadius: "20px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  backgroundColor: getStatusColor(order.financialStatus, order.balanceCollected) + "20",
-                  color: getStatusColor(order.financialStatus, order.balanceCollected),
-                }}>
-                  {getStatusLabel(order.financialStatus, order.balanceCollected)}
-                </span>
+                {activeTab === "pending" ? (
+                  <span style={{
+                    display: "inline-block",
+                    padding: "3px 10px",
+                    borderRadius: "20px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    backgroundColor: "#fff8ec",
+                    color: "#b54708",
+                    border: "1px solid #ffc453",
+                  }}>
+                    COD Pending
+                  </span>
+                ) : (
+                  <span style={{
+                    display: "inline-block",
+                    padding: "3px 10px",
+                    borderRadius: "20px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    backgroundColor: "#f0fdf4",
+                    color: "#1a7f37",
+                    border: "1px solid #bbf7d0",
+                  }}>
+                    Collected
+                  </span>
+                )}
               </div>
 
-              {/* Action button */}
-              <div>
-                {!order.balanceCollected && order.remainingBalance > 0 ? (
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {activeTab === "pending" && (
                   <button
                     onClick={() => handleMarkCollected(order)}
                     disabled={collectingId === order.id}
@@ -305,25 +366,39 @@ export default function OrdersPage() {
                   >
                     {collectingId === order.id ? "Saving..." : "Mark Collected"}
                   </button>
-                ) : (
-                  <span style={{ fontSize: "12px", color: "#6d7175" }}>
-                    ✓ Done
+                )}
+                {activeTab === "collected" && (
+                  <span style={{ fontSize: "12px", color: "#1a7f37", fontWeight: "600" }}>
+                    Done
                   </span>
                 )}
+                <a
+                  href={order.shopifyAdminUrl}
+                  target="_top"
+                  style={{
+                    fontSize: "12px",
+                    color: "#6d7175",
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  View in Shopify
+                </a>
               </div>
             </div>
           ))}
 
-          {/* Footer summary */}
+          {/* Footer */}
           <div style={{
             padding: "12px 16px",
             borderTop: "1px solid #e1e3e5",
             fontSize: "13px",
             color: "#6d7175",
           }}>
-            {orders.length} deposit order{orders.length !== 1 ? "s" : ""} found
-            {" · "}
-            {orders.filter(o => !o.balanceCollected && o.remainingBalance > 0).length} pending COD collection
+            {activeTab === "pending"
+              ? `${orders.length} pending order${orders.length !== 1 ? "s" : ""} · ${orders.length} awaiting COD collection`
+              : `${collectedOrders.length} collected order${collectedOrders.length !== 1 ? "s" : ""}`
+            }
           </div>
         </s-card>
       )}

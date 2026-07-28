@@ -475,7 +475,7 @@ export default function Settings() {
                             Open your theme editor and confirm the lockdIn Deposit Options block is added to your product page template.
                         </div>
                         <a
-                            href="https://admin.shopify.com/store/fixmystore-dev/themes/current/editor"
+                            href="https://admin.shopify.com/store/affans-testing/themes/current/editor"
                             target="_top"
                             style={{
                                 display: "inline-block",
@@ -491,7 +491,7 @@ export default function Settings() {
                             Open theme editor →
                         </a>
                     </div>
-                </SettingRow>
+                </SettingRow>p
             </SectionCard>
 
             {/* Deposit defaults */}
