@@ -53,10 +53,12 @@ export const permissions: GadgetPermissions = {
         },
       },
       actions: {
+        cancelShopSubscription: true,
         confirmSubscription: true,
         createSellingPlanGroup: true,
         createSubscription: true,
         deleteSellingPlanGroup: true,
+        getActiveShopSubscription: true,
         getDepositOrders: true,
         getSettings: true,
         getSubscriptionStatus: true,

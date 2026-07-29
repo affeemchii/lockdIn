@@ -138,6 +138,5 @@ export const run = async ({
 };
 
 export const options = {
-  actionType: "custom" as const,
   triggers: { api: true }
 };

@@ -70,7 +70,7 @@ export default function AppDashboardIndex() {
               lockdIn theme extensions may not be enabled. Open the theme editor to ensure lockdIn is properly installed.
             </span>
             <a href="https://admin.shopify.com/themes/current/editor" target="_blank" style={{ fontSize: "13px", color: "#2c6ecb", textDecoration: "none", whiteSpace: "nowrap" }}>
-              Open theme editor →
+              Open theme editor
             </a>
           </div>
 
@@ -90,7 +90,9 @@ export default function AppDashboardIndex() {
                   <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <p style={{ fontSize: "14px", fontWeight: "600", color: "#202223", margin: 0 }}>{option.name}</p>
                     <p style={{ fontSize: "12px", color: "#6d7175", margin: 0 }}>
-                      {option.depositType === "percentage" ? `${option.depositValue}% deposit` : `$${option.depositValue} deposit`} · {option.balanceDueTrigger === "FULFILLMENT" ? "Due on fulfillment" : option.balanceDueTrigger === "TIME_AFTER_CHECKOUT" ? "Due after checkout" : "Due on specific date"}
+                      {option.depositType === "percentage" ? `${option.depositValue}% deposit` : `$${option.depositValue} deposit`}
+                      {" · "}
+                      {option.balanceDueTrigger === "FULFILLMENT" ? "Due on fulfillment" : option.balanceDueTrigger === "TIME_AFTER_CHECKOUT" ? "Due after checkout" : "Due on specific date"}
                     </p>
                   </div>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -115,21 +117,21 @@ export default function AppDashboardIndex() {
             <div style={{ backgroundColor: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "60px 40px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
               <div style={{ width: "80px", height: "80px", marginBottom: "24px", backgroundColor: "#f6f6f7", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="12" y="28" width="40" height="28" rx="4" stroke="#8c9196" strokeWidth="2.5" fill="#f6f6f7"/>
-                  <path d="M22 28V20C22 14.477 26.477 10 32 10C37.523 10 42 14.477 42 20V28" stroke="#8c9196" strokeWidth="2.5" strokeLinecap="round"/>
-                  <circle cx="32" cy="42" r="4" fill="#8c9196"/>
+                  <rect x="12" y="28" width="40" height="28" rx="4" stroke="#8c9196" strokeWidth="2.5" fill="#f6f6f7" />
+                  <path d="M22 28V20C22 14.477 26.477 10 32 10C37.523 10 42 14.477 42 20V28" stroke="#8c9196" strokeWidth="2.5" strokeLinecap="round" />
+                  <circle cx="32" cy="42" r="4" fill="#8c9196" />
                 </svg>
               </div>
               <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#202223", marginBottom: "8px" }}>
                 Create your first purchase option
               </h2>
               <p style={{ fontSize: "14px", color: "#6d7175", maxWidth: "380px", lineHeight: "1.6", marginBottom: "20px" }}>
-                Now that you've completed initial setup, create a purchase option and choose which products to offer with a deposit.
+                Now that you have completed initial setup, create a purchase option and choose which products to offer with a deposit.
               </p>
               <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", backgroundColor: "#fff8e6", border: "1px solid #f5c842", borderRadius: "8px", padding: "12px 16px", maxWidth: "440px", width: "100%", marginBottom: "24px", textAlign: "left" }}>
-                <span style={{ fontSize: "16px", marginTop: "1px" }}>⚠️</span>
+                <span style={{ fontSize: "16px", marginTop: "1px" }}>{"⚠️"}</span>
                 <p style={{ fontSize: "13px", color: "#4f5359", lineHeight: "1.5", margin: 0 }}>
-                  If you're new to lockdIn, we recommend starting with a test product and running through the full buying experience before going live.
+                  If you are new to lockdIn, we recommend starting with a test product and running through the full buying experience before going live.
                 </p>
               </div>
               <s-link href="/app/create">
@@ -153,7 +155,7 @@ export default function AppDashboardIndex() {
         <div style={{ width: "260px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "12px" }}>
           <div style={{ backgroundColor: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <span style={{ fontSize: "16px" }}>❓</span>
+              <span style={{ fontSize: "16px" }}>{"❓"}</span>
               <p style={{ fontSize: "14px", fontWeight: "600", color: "#202223", margin: 0 }}>Help center</p>
             </div>
             <p style={{ fontSize: "13px", color: "#6d7175", marginBottom: "12px", lineHeight: "1.5" }}>
@@ -165,7 +167,7 @@ export default function AppDashboardIndex() {
           </div>
           <div style={{ backgroundColor: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <span style={{ fontSize: "16px" }}>✨</span>
+              <span style={{ fontSize: "16px" }}>{"✨"}</span>
               <p style={{ fontSize: "14px", fontWeight: "600", color: "#202223", margin: 0 }}>Explore features</p>
             </div>
             <p style={{ fontSize: "13px", color: "#6d7175", marginBottom: "12px", lineHeight: "1.5" }}>
@@ -177,7 +179,7 @@ export default function AppDashboardIndex() {
           </div>
           <div style={{ backgroundColor: "#ffffff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <span style={{ fontSize: "16px" }}>📋</span>
+              <span style={{ fontSize: "16px" }}>{"📋"}</span>
               <p style={{ fontSize: "14px", fontWeight: "600", color: "#202223", margin: 0 }}>Change log</p>
             </div>
             <p style={{ fontSize: "13px", color: "#6d7175", marginBottom: "12px", lineHeight: "1.5" }}>
@@ -193,3 +195,4 @@ export default function AppDashboardIndex() {
     </s-page>
   );
 }
+

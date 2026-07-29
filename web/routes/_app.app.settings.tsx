@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { api } from "../api";
 import { useBilling } from "../hooks/useBilling";
 import { UpgradeModal } from "../components/UpgradeModal";
@@ -174,12 +175,12 @@ function NumberInput({ value, onChange, min, max, suffix }: {
 }
 
 export default function Settings() {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Settings
     const { billing, startUpgrade } = useBilling();
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [defaultDepositPercentage, setDefaultDepositPercentage] = useState(20);
@@ -251,7 +252,7 @@ export default function Settings() {
                 billing={billing}
                 startUpgrade={startUpgrade}
             />
-            {/* Page header */}
+
             <div style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -281,11 +282,10 @@ export default function Settings() {
                         transition: "all 0.2s ease",
                     }}
                 >
-                    {saved ? "✓ Saved" : saving ? "Saving..." : "Save settings"}
+                    {saved ? "Saved" : saving ? "Saving..." : "Save settings"}
                 </button>
             </div>
 
-            {/* Error */}
             {errorMessage && (
                 <div style={{
                     padding: "12px 16px",
@@ -300,173 +300,40 @@ export default function Settings() {
                 </div>
             )}
 
-            {/* Account */}
-            <SectionCard
-                title="Account"
-                description="Your store account details."
-            >
-                <SettingRow
-                    label="Store name"
-                    description="The name of your Shopify store."
-                >
+            <SectionCard title="Account" description="Your store account details.">
+                <SettingRow label="Store name" description="The name of your Shopify store.">
                     <TextInput value={shopName} disabled />
                 </SettingRow>
-                <SettingRow
-                    label="Contact email"
-                    description="We use this to contact you about your lockdIn account."
-                    last
-                >
+                <SettingRow label="Contact email" description="We use this to contact you about your lockdIn account." last>
                     <TextInput value={shopEmail} disabled />
                 </SettingRow>
             </SectionCard>
 
-            {/* Billing */}
-            <SectionCard
-                title="Billing"
-                description="Your current lockdIn subscription plan."
-            >
-                <SettingRow
-                    label="Current plan"
-                    description="Upgrade to unlock unlimited deposit orders and advanced features."
-                    last
-                >
-                    {billing?.isPro ? (
-                        <div style={{
-                            border: "1px solid #b3d8b0",
-                            borderRadius: "10px",
-                            padding: "16px",
-                            backgroundColor: "#f0faf0",
-                        }}>
-                            <div style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                marginBottom: "8px",
-                            }}>
-                                <div>
-                                    <span style={{ fontSize: "14px", fontWeight: "700", color: "#202223" }}>
-                                        Pro plan
-                                    </span>
-                                    <span style={{
-                                        marginLeft: "8px",
-                                        padding: "2px 8px",
-                                        backgroundColor: "#008060",
-                                        color: "#ffffff",
-                                        borderRadius: "20px",
-                                        fontSize: "11px",
-                                        fontWeight: "600",
-                                    }}>
-                                        Active
-                                    </span>
-                                </div>
-                                <span style={{ fontSize: "14px", fontWeight: "700", color: "#202223" }}>
-                                    $14.99/month
-                                </span>
-                            </div>
-                            <div style={{ fontSize: "12px", color: "#4a7c59" }}>
-                                ✓ Unlimited deposit orders · ✓ Unlimited purchase options · ✓ COD reminders
-                            </div>
-                        </div>
-                    ) : (
-                        <div style={{ border: "1px solid #e1e3e5", borderRadius: "10px", padding: "16px" }}>
-                            <div style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                marginBottom: "8px",
-                            }}>
-                                <div>
-                                    <span style={{ fontSize: "14px", fontWeight: "700", color: "#202223" }}>
-                                        Free plan
-                                    </span>
-                                    <span style={{
-                                        marginLeft: "8px",
-                                        padding: "2px 8px",
-                                        backgroundColor: "#e3f1df",
-                                        color: "#1a7f37",
-                                        borderRadius: "20px",
-                                        fontSize: "11px",
-                                        fontWeight: "600",
-                                    }}>
-                                        Current plan
-                                    </span>
-                                </div>
-                                <span style={{ fontSize: "14px", fontWeight: "700", color: "#202223" }}>
-                                    $0/month
-                                </span>
-                            </div>
-                            <div style={{ display: "flex", gap: "16px", marginBottom: "12px" }}>
-                                <div style={{ flex: 1, background: "#f6f6f7", borderRadius: "8px", padding: "10px 12px" }}>
-                                    <div style={{ fontSize: "18px", fontWeight: "700", color: "#202223" }}>
-                                        {billing?.monthlyOrderCount ?? 0}
-                                        <span style={{ fontSize: "13px", fontWeight: "400", color: "#6d7175" }}>
-                                            /{billing?.FREE_ORDER_LIMIT ?? 25}
-                                        </span>
-                                    </div>
-                                    <div style={{ fontSize: "11px", color: "#6d7175", marginTop: "2px" }}>
-                                        deposit orders this month
-                                    </div>
-                                </div>
-                                <div style={{ flex: 1, background: "#f6f6f7", borderRadius: "8px", padding: "10px 12px" }}>
-                                    <div style={{ fontSize: "18px", fontWeight: "700", color: "#202223" }}>
-                                        {billing?.purchaseOptionCount ?? 0}
-                                        <span style={{ fontSize: "13px", fontWeight: "400", color: "#6d7175" }}>
-                                            /{billing?.FREE_PURCHASE_OPTION_LIMIT ?? 3}
-                                        </span>
-                                    </div>
-                                    <div style={{ fontSize: "11px", color: "#6d7175", marginTop: "2px" }}>
-                                        purchase options
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowUpgradeModal(true)}
-                                style={{
-                                    padding: "8px 16px",
-                                    backgroundColor: "#202223",
-                                    color: "#ffffff",
-                                    border: "none",
-                                    borderRadius: "6px",
-                                    fontSize: "12px",
-                                    fontWeight: "600",
-                                    cursor: "pointer",
-                                    width: "100%",
-                                }}
-                            >
-                                Upgrade to Pro — $14.99/month
-                            </button>
-                        </div>
-                    )}
+            <SectionCard title="Billing" description="Manage your lockdIn subscription plan.">
+                <SettingRow label="Subscription" description="View your current plan, upgrade, or cancel." last>
+                    <button
+                        onClick={() => navigate("/app/billing")}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: "#202223",
+                            color: "#ffffff",
+                            border: "none",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                        }}
+                    >
+                        Manage billing
+                    </button>
                 </SettingRow>
             </SectionCard>
 
-            {/* Theme installation */}
-            <SectionCard
-                title="Theme installation"
-                description="Add the lockdIn deposit widget to your storefront."
-            >
-                <SettingRow
-                    label="Widget block"
-                    description="The deposit widget must be added to your product page template in the theme editor."
-                    last
-                >
-                    <div style={{
-                        border: "1px solid #e1e3e5",
-                        borderRadius: "10px",
-                        padding: "16px",
-                    }}>
-                        <div style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            marginBottom: "12px",
-                        }}>
-                            <div style={{
-                                width: "8px",
-                                height: "8px",
-                                borderRadius: "50%",
-                                backgroundColor: "#f59e0b",
-                            }} />
+            <SectionCard title="Theme installation" description="Add the lockdIn deposit widget to your storefront.">
+                <SettingRow label="Widget block" description="The deposit widget must be added to your product page template in the theme editor." last>
+                    <div style={{ border: "1px solid #e1e3e5", borderRadius: "10px", padding: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                            <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#f59e0b" }} />
                             <span style={{ fontSize: "13px", color: "#202223", fontWeight: "600" }}>
                                 Verify widget is active on your theme
                             </span>
@@ -474,35 +341,27 @@ export default function Settings() {
                         <div style={{ fontSize: "12px", color: "#6d7175", marginBottom: "12px" }}>
                             Open your theme editor and confirm the lockdIn Deposit Options block is added to your product page template.
                         </div>
-                        <a
-                            href="https://admin.shopify.com/store/affans-testing/themes/current/editor"
-                            target="_top"
+                        <button
+                            onClick={() => open("https://admin.shopify.com/store/affans-testing/themes/current/editor", "_top")}
                             style={{
-                                display: "inline-block",
                                 padding: "8px 16px",
                                 backgroundColor: "#202223",
                                 color: "#ffffff",
+                                border: "none",
                                 borderRadius: "6px",
                                 fontSize: "12px",
                                 fontWeight: "600",
-                                textDecoration: "none",
+                                cursor: "pointer",
                             }}
                         >
-                            Open theme editor →
-                        </a>
+                            Open theme editor
+                        </button>
                     </div>
-                </SettingRow>p
+                </SettingRow>
             </SectionCard>
 
-            {/* Deposit defaults */}
-            <SectionCard
-                title="Deposit defaults"
-                description="Pre-filled values when you create a new purchase option."
-            >
-                <SettingRow
-                    label="Default deposit %"
-                    description="The deposit percentage automatically filled in when creating a new purchase option."
-                >
+            <SectionCard title="Deposit defaults" description="Pre-filled values when you create a new purchase option.">
+                <SettingRow label="Default deposit %" description="The deposit percentage automatically filled in when creating a new purchase option.">
                     <NumberInput
                         value={defaultDepositPercentage}
                         onChange={setDefaultDepositPercentage}
@@ -511,11 +370,7 @@ export default function Settings() {
                         suffix="% of order total"
                     />
                 </SettingRow>
-                <SettingRow
-                    label="Line item help text"
-                    description="Shown next to the line item at checkout. Max 29 characters."
-                    last
-                >
+                <SettingRow label="Line item help text" description="Shown next to the line item at checkout. Max 29 characters." last>
                     <TextInput
                         value={defaultLineItemText}
                         onChange={setDefaultLineItemText}
@@ -525,15 +380,8 @@ export default function Settings() {
                 </SettingRow>
             </SectionCard>
 
-            {/* COD reminders */}
-            <SectionCard
-                title="COD balance reminders"
-                description="Get reminded to collect outstanding COD balances."
-            >
-                <SettingRow
-                    label="Enable reminders"
-                    description="Receive a notification when a COD balance is approaching its collection date."
-                >
+            <SectionCard title="COD balance reminders" description="Get reminded to collect outstanding COD balances.">
+                <SettingRow label="Enable reminders" description="Receive a notification when a COD balance is approaching its collection date.">
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                         <Toggle value={balanceDueReminders} onChange={setBalanceDueReminders} />
                         <span style={{ fontSize: "13px", color: "#6d7175" }}>
@@ -542,11 +390,7 @@ export default function Settings() {
                     </div>
                 </SettingRow>
                 {balanceDueReminders && (
-                    <SettingRow
-                        label="Reminder timing"
-                        description="How many days before the balance is due to send a reminder."
-                        last
-                    >
+                    <SettingRow label="Reminder timing" description="How many days before the balance is due to send a reminder." last>
                         <NumberInput
                             value={reminderDays}
                             onChange={setReminderDays}
@@ -561,14 +405,10 @@ export default function Settings() {
                 )}
             </SectionCard>
 
-            {/* Support */}
             <SectionCard title="Support">
-                <SettingRow
-                    label="Need help?"
-                    description="Reach out and we will get back to you within 24 hours."
-                >
+                <SettingRow label="Need help?" description="Reach out and we will get back to you within 24 hours.">
                     <a
-                        href="mailto:support@lockdin.app"
+                        href="mailto:affanali2000@icloud.com"
                         style={{
                             fontSize: "13px",
                             color: "#202223",
@@ -577,7 +417,7 @@ export default function Settings() {
                             borderBottom: "1px solid #202223",
                         }}
                     >
-                        support@lockdin.app
+                        affanali2000@icloud.com
                     </a>
                 </SettingRow>
                 <SettingRow label="App version" last>
