@@ -1,6 +1,6 @@
 # Learn more about working with Shopify TOML files with Gadget at https://docs.gadget.dev/guides/plugins/shopify/advanced-topics/shopify-app-toml
 
-client_id = "3c75a0223a59bad6761918037660c54f"
+client_id = "d3e87bba4b8e55ae281ac183fef785ab"
 name = "lockdin"
 application_url = "https://lockdin.gadget.app/api/shopify/install-or-render"
 embedded = true
