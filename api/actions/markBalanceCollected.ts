@@ -20,7 +20,7 @@ export const run = async ({
   const { orderId, orderTags, remainingBalance, currencyCode } = params as any;
 
   // Build the Shopify global order ID
-  const shopifyOrderGid = `gid://shopify/Order/${orderId}`;
+  const numericId = orderId.replace("gid://shopify/Order/", ""); const shopifyOrderGid = `gid://shopify/Order/${numericId}`;
 
   // Step 1 — Parse existing tags and add our collected tag.
   // We keep all existing tags and append lockdin-balance-collected.

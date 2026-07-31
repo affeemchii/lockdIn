@@ -5,6 +5,7 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
+    "dev": "react-router typegen --watch",
     "build": "NODE_ENV=production react-router build",
     "shopify": "shopify",
     "shopify:config:use:development": "shopify app config use shopify.app.development.toml",

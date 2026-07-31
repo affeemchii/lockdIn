@@ -1,407 +1,487 @@
 import { useState, useEffect } from "react";
+import type { LoaderFunctionArgs } from "react-router";
 import { api } from "../api";
-import { useBilling } from "../hooks/useBilling";
-import { UpgradeModal } from "../components/UpgradeModal";
+
+// React Router v7 requires a loader export for SSR routes.
+// All actual data fetching happens client-side via useEffect.
+export async function loader({ request }: LoaderFunctionArgs) {
+  return {};
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Order = {
   id: string;
-  gadgetId: string;
-  orderNumber: string;
+  numericId: string;
+  name: string;
   createdAt: string;
-  customerName: string;
-  customerEmail: string;
-  financialStatus: string;
-  totalPrice: number;
-  totalReceived: number;
-  remainingBalance: number;
-  currencyCode: string;
-  balanceCollected: boolean;
+  displayFinancialStatus: string;
+  displayFulfillmentStatus: string;
+  totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
   tags: string[];
-  productTitle: string;
-  sellingPlanName: string;
-  hasSellingPlan: boolean;
-  shopifyAdminUrl: string;
 };
 
+type Tab = "all" | "pending" | "collected";
+
+// ─── Badge ────────────────────────────────────────────────────────────────────
+
+function Badge({ status, type }: { status: string; type: "payment" | "fulfillment" }) {
+  const s = status?.toLowerCase() ?? "";
+
+  let bg = "#f6f6f7";
+  let color = "#6d7175";
+  let label = status ?? "—";
+
+  if (type === "payment") {
+    if (s === "partially_paid" || s === "partially paid") {
+      bg = "#fff3cd"; color = "#b7791f"; label = "Partially paid";
+    } else if (s === "paid") {
+      bg = "#d4edda"; color = "#1a7f37"; label = "Paid";
+    } else if (s === "pending") {
+      bg = "#fff3cd"; color = "#b7791f"; label = "Pending";
+    } else if (s === "refunded") {
+      bg = "#f6f6f7"; color = "#6d7175"; label = "Refunded";
+    }
+  }
+
+  if (type === "fulfillment") {
+    if (s === "fulfilled") {
+      bg = "#d4edda"; color = "#1a7f37"; label = "Fulfilled";
+    } else if (s === "unfulfilled") {
+      bg = "#f6f6f7"; color = "#6d7175"; label = "Unfulfilled";
+    } else if (s === "partial") {
+      bg = "#fff3cd"; color = "#b7791f"; label = "Partial";
+    }
+  }
+
+  return (
+    <span style={{
+      display: "inline-block",
+      padding: "2px 10px",
+      borderRadius: "20px",
+      fontSize: "12px",
+      fontWeight: "600",
+      backgroundColor: bg,
+      color,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
+
+function formatMoney(amount: string, currency: string) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency,
+  }).format(Number(amount));
+}
+
+function isCollected(order: Order) {
+  return order.tags?.includes("lockdin-balance-collected");
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function OrdersPage() {
-  const { billing, startUpgrade } = useBilling();
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"pending" | "collected">("pending");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [collectedOrders, setCollectedOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [collectingId, setCollectingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("all");
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [collecting, setCollecting] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchOrders();
+    loadOrders();
   }, []);
 
-  async function fetchOrders() {
+  async function loadOrders() {
     setLoading(true);
-    setError(null);
+    setErrorMessage(null);
     try {
       const result = await api.getDepositOrders();
-      setOrders((result as any).orders || []);
-      setCollectedOrders((result as any).collectedOrders || []);
+      const all = [...(result.pendingOrders ?? []), ...(result.collectedOrders ?? [])];
+      setOrders(all);
     } catch (err: any) {
-      setError(err.message || "Failed to load orders");
+      setErrorMessage("Failed to load orders. Please refresh.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleMarkCollected(order: Order) {
-    setCollectingId(order.id);
+  const filteredOrders = orders.filter((o) => {
+    if (activeTab === "pending") return !isCollected(o);
+    if (activeTab === "collected") return isCollected(o);
+    return true;
+  });
+
+  const pendingCount = orders.filter((o) => !isCollected(o)).length;
+  const collectedCount = orders.filter((o) => isCollected(o)).length;
+
+  async function handleMarkCollected(orderId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setCollecting(orderId);
     try {
-      await api.markBalanceCollected({
-        orderId: order.gadgetId,
-        orderTags: JSON.stringify(order.tags),
-        remainingBalance: order.remainingBalance,
-        currencyCode: order.currencyCode,
-      });
-      await fetchOrders();
+      console.log("orderId received:", orderId); await api.markBalanceCollected({ orderId: orderId.replace("gid://shopify/Order/", "") });
+      await loadOrders();
+      if (expandedRow === orderId) setExpandedRow(null);
     } catch (err: any) {
-      setError(err.message || "Failed to mark balance as collected");
+      setErrorMessage("Failed to mark order as collected: " + err.message);
     } finally {
-      setCollectingId(null);
+      setCollecting(null);
     }
   }
 
-  function formatMoney(amount: number, currency: string) {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "USD",
-    }).format(amount);
+  function toggleRow(orderId: string) {
+    setExpandedRow((prev) => (prev === orderId ? null : orderId));
   }
 
-  function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+  function openInShopify(order: Order, e: React.MouseEvent) {
+    e.stopPropagation();
+    window.open(
+      `https://admin.shopify.com/store/affans-testing/orders/${order.numericId}`,
+      "_blank"
+    );
   }
 
-  const currentOrders = activeTab === "pending" ? orders : collectedOrders;
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <s-page heading="Deposit Orders">
-      <UpgradeModal
-        isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        title="You've reached your monthly order limit"
-        message="You've used all 25 deposit orders on the free plan this month. Upgrade to Pro for unlimited orders."
-        limitType="orders"
-        billing={billing}
-        startUpgrade={startUpgrade}
-      />
-
-      {/* Tab bar */}
+    <s-page>
+      {/* Page header */}
       <div style={{
         display: "flex",
-        borderBottom: "1px solid #e1e3e5",
-        marginBottom: "20px",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        marginBottom: "16px",
       }}>
+        <div>
+          <div style={{ fontSize: "22px", fontWeight: "700", color: "#202223", letterSpacing: "-0.3px" }}>
+            Orders
+          </div>
+          <div style={{ fontSize: "13px", color: "#6d7175", marginTop: "4px" }}>
+            Deposit orders and COD balance collection status.
+          </div>
+        </div>
         <button
-          onClick={() => setActiveTab("pending")}
+          onClick={loadOrders}
           style={{
-            padding: "10px 20px",
-            fontSize: "14px",
-            fontWeight: activeTab === "pending" ? "600" : "400",
-            color: activeTab === "pending" ? "#202223" : "#6d7175",
-            background: "none",
-            border: "none",
-            borderBottom: activeTab === "pending" ? "2px solid #202223" : "2px solid transparent",
+            padding: "8px 16px",
+            backgroundColor: "#ffffff",
+            border: "1px solid #c9cccf",
+            borderRadius: "8px",
+            fontSize: "13px",
+            fontWeight: "600",
             cursor: "pointer",
-            marginBottom: "-1px",
+            color: "#202223",
           }}
         >
-          {"Pending COD "}
-          <span style={{
-            marginLeft: "6px",
-            padding: "2px 8px",
-            borderRadius: "20px",
-            fontSize: "12px",
-            fontWeight: "600",
-            backgroundColor: orders.length > 0 ? "#fff4e5" : "#f1f2f3",
-            color: orders.length > 0 ? "#916a00" : "#6d7175",
-          }}>
-            {orders.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("collected")}
-          style={{
-            padding: "10px 20px",
-            fontSize: "14px",
-            fontWeight: activeTab === "collected" ? "600" : "400",
-            color: activeTab === "collected" ? "#202223" : "#6d7175",
-            background: "none",
-            border: "none",
-            borderBottom: activeTab === "collected" ? "2px solid #202223" : "2px solid transparent",
-            cursor: "pointer",
-            marginBottom: "-1px",
-          }}
-        >
-          {"Collected "}
-          <span style={{
-            marginLeft: "6px",
-            padding: "2px 8px",
-            borderRadius: "20px",
-            fontSize: "12px",
-            fontWeight: "600",
-            backgroundColor: collectedOrders.length > 0 ? "#f0fdf4" : "#f1f2f3",
-            color: collectedOrders.length > 0 ? "#1a7f37" : "#6d7175",
-          }}>
-            {collectedOrders.length}
-          </span>
+          ↻ Refresh
         </button>
       </div>
 
-      {/* Subtitle */}
-      <div style={{ marginBottom: "16px", fontSize: "14px", color: "#6d7175" }}>
-        {activeTab === "pending"
-          ? "Orders where customers paid a deposit. Mark balance as collected after receiving COD payment."
-          : "Orders where COD balance has been collected and marked as fully paid."
-        }
-      </div>
-
-      {/* Order limit warning banner */}
-      {!billing?.isPro && billing && billing.monthlyOrderCount >= billing.FREE_ORDER_LIMIT * 0.8 && (
+      {/* Error banner */}
+      {errorMessage && (
         <div style={{
           padding: "12px 16px",
-          backgroundColor: billing.isOrderLimitHit ? "#fff4f4" : "#fff4e5",
-          border: `1px solid ${billing.isOrderLimitHit ? "#d82c0d" : "#ffc453"}`,
+          backgroundColor: "#fff4f4",
+          border: "1px solid #ffd2d2",
           borderRadius: "8px",
+          color: "#d82c0d",
+          fontSize: "13px",
           marginBottom: "16px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
         }}>
-          <span style={{ fontSize: "13px", color: billing.isOrderLimitHit ? "#d82c0d" : "#916a00" }}>
-            {billing.isOrderLimitHit
-              ? `You have reached your limit of ${billing.FREE_ORDER_LIMIT} deposit orders this month.`
-              : `You have used ${billing.monthlyOrderCount} of ${billing.FREE_ORDER_LIMIT} free deposit orders this month.`
-            }
-          </span>
-          <button
-            onClick={() => setShowUpgradeModal(true)}
-            style={{
-              padding: "6px 12px",
-              backgroundColor: "#202223",
-              color: "#ffffff",
-              border: "none",
-              borderRadius: "6px",
-              fontSize: "12px",
-              fontWeight: "600",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              marginLeft: "12px",
-            }}
-          >
-            Upgrade to Pro
-          </button>
+          {errorMessage}
         </div>
       )}
 
-      {/* Error banner */}
-      {error && (
-        <s-banner tone="critical" style={{ marginBottom: "16px" }}>
-          {error}
-        </s-banner>
-      )}
+      {/* Main card */}
+      <div style={{
+        backgroundColor: "#ffffff",
+        border: "1px solid #e1e3e5",
+        borderRadius: "12px",
+        overflow: "hidden",
+      }}>
 
-      {/* Loading state */}
-      {loading && (
-        <s-card>
-          <div style={{ padding: "40px", textAlign: "center", color: "#6d7175" }}>
+        {/* Tab bar */}
+        <div style={{
+          display: "flex",
+          borderBottom: "1px solid #e1e3e5",
+          padding: "0 16px",
+          gap: "4px",
+        }}>
+          {(["all", "pending", "collected"] as Tab[]).map((tab) => {
+            const labels: Record<Tab, string> = {
+              all: `All orders (${orders.length})`,
+              pending: `Pending COD (${pendingCount})`,
+              collected: `Collected (${collectedCount})`,
+            };
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: "12px 16px",
+                  fontSize: "13px",
+                  fontWeight: isActive ? "600" : "400",
+                  color: isActive ? "#202223" : "#6d7175",
+                  border: "none",
+                  borderBottom: isActive ? "2px solid #202223" : "2px solid transparent",
+                  backgroundColor: "transparent",
+                  cursor: "pointer",
+                  marginBottom: "-1px",
+                }}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <div style={{ padding: "60px", textAlign: "center", color: "#6d7175", fontSize: "13px" }}>
             Loading orders...
           </div>
-        </s-card>
-      )}
-
-      {/* Empty state */}
-      {!loading && currentOrders.length === 0 && (
-        <s-card>
-          <div style={{ padding: "60px 40px", textAlign: "center" }}>
-            <div style={{ fontSize: "40px", marginBottom: "16px" }}>
-              {activeTab === "pending" ? "📦" : "✅"}
-            </div>
-            <div style={{
-              fontSize: "16px",
-              fontWeight: "600",
-              color: "#202223",
-              marginBottom: "8px",
-            }}>
-              {activeTab === "pending" ? "No pending COD orders" : "No collected orders yet"}
-            </div>
-            <div style={{ fontSize: "14px", color: "#6d7175" }}>
-              {activeTab === "pending"
-                ? "When customers place deposit orders, they will appear here for COD collection."
-                : "Orders you have marked as collected will appear here."
-              }
-            </div>
+        ) : filteredOrders.length === 0 ? (
+          <div style={{ padding: "60px", textAlign: "center", color: "#6d7175", fontSize: "13px" }}>
+            No orders found.
           </div>
-        </s-card>
-      )}
-
-      {/* Orders table */}
-      {!loading && currentOrders.length > 0 && (
-        <s-card>
-          {/* Table header */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr 1fr 1.5fr 1fr",
-            gap: "12px",
-            padding: "12px 16px",
-            borderBottom: "1px solid #e1e3e5",
-            fontSize: "12px",
-            fontWeight: "600",
-            color: "#6d7175",
-            textTransform: "uppercase",
-            letterSpacing: "0.5px",
-          }}>
-            <div>Order</div>
-            <div>Customer</div>
-            <div>Date</div>
-            <div>{activeTab === "pending" ? "Deposit Paid" : "Total Paid"}</div>
-            <div>{activeTab === "pending" ? "Balance Due" : "Order Total"}</div>
-            <div>Status</div>
-            <div>Action</div>
-          </div>
-
-          {/* Order rows */}
-          {currentOrders.map((order) => (
-            <div
-              key={order.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "0.8fr 1.5fr 1fr 1fr 1fr 1.5fr 1fr",
-                gap: "12px",
-                padding: "16px",
-                borderBottom: "1px solid #f1f2f3",
-                alignItems: "center",
-                fontSize: "14px",
-              }}
-            >
-              <div style={{ fontWeight: "600", color: "#202223" }}>
-                {order.orderNumber}
-              </div>
-
-              <div>
-                <div style={{ fontWeight: "500", color: "#202223" }}>
-                  {order.customerName}
-                </div>
-                <div style={{ fontSize: "12px", color: "#6d7175" }}>
-                  {order.customerEmail}
-                </div>
-              </div>
-
-              <div style={{ color: "#6d7175" }}>
-                {formatDate(order.createdAt)}
-              </div>
-
-              <div style={{ fontWeight: "600", color: "#1a7f37" }}>
-                {formatMoney(order.totalReceived, order.currencyCode)}
-              </div>
-
-              <div style={{
-                fontWeight: "600",
-                color: activeTab === "collected" ? "#6d7175" : "#b54708",
-              }}>
-                {activeTab === "collected"
-                  ? formatMoney(order.totalPrice, order.currencyCode)
-                  : formatMoney(order.remainingBalance, order.currencyCode)
-                }
-              </div>
-
-              <div>
-                {activeTab === "pending" ? (
-                  <span style={{
-                    display: "inline-block",
-                    padding: "3px 10px",
-                    borderRadius: "20px",
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ backgroundColor: "#fafafa" }}>
+                {["Order", "Date", "Customer", "Payment", "Fulfillment", "Total", "Action"].map((h) => (
+                  <th key={h} style={{
+                    padding: "10px 16px",
+                    textAlign: "left",
                     fontSize: "12px",
                     fontWeight: "600",
-                    backgroundColor: "#fff8ec",
-                    color: "#b54708",
-                    border: "1px solid #ffc453",
-                  }}>
-                    COD Pending
-                  </span>
-                ) : (
-                  <span style={{
-                    display: "inline-block",
-                    padding: "3px 10px",
-                    borderRadius: "20px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    backgroundColor: "#f0fdf4",
-                    color: "#1a7f37",
-                    border: "1px solid #bbf7d0",
-                  }}>
-                    Collected
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                {activeTab === "pending" && (
-                  <button
-                    onClick={() => handleMarkCollected(order)}
-                    disabled={collectingId === order.id}
-                    style={{
-                      padding: "6px 12px",
-                      backgroundColor: collectingId === order.id ? "#e1e3e5" : "#202223",
-                      color: collectingId === order.id ? "#6d7175" : "#ffffff",
-                      border: "none",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      fontWeight: "600",
-                      cursor: collectingId === order.id ? "not-allowed" : "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {collectingId === order.id ? "Saving..." : "Mark Collected"}
-                  </button>
-                )}
-                {activeTab === "collected" && (
-                  <span style={{ fontSize: "12px", color: "#1a7f37", fontWeight: "600" }}>
-                    Done
-                  </span>
-                )}
-                <a
-                  href={order.shopifyAdminUrl}
-                  target="_top"
-                  style={{
-                    fontSize: "12px",
                     color: "#6d7175",
-                    textDecoration: "none",
+                    borderBottom: "1px solid #e1e3e5",
                     whiteSpace: "nowrap",
-                  }}
-                >
-                  View in Shopify
-                </a>
-              </div>
-            </div>
-          ))}
+                  }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredOrders.map((order) => {
+                const collected = isCollected(order);
+                const isExpanded = expandedRow === order.id;
+                const isMarkingThis = collecting === order.id;
+                const money = formatMoney(
+                  order.totalPriceSet?.shopMoney?.amount ?? "0",
+                  order.totalPriceSet?.shopMoney?.currencyCode ?? "USD"
+                );
 
-          {/* Footer */}
-          <div style={{
-            padding: "12px 16px",
-            borderTop: "1px solid #e1e3e5",
-            fontSize: "13px",
-            color: "#6d7175",
-          }}>
-            {activeTab === "pending"
-              ? `${orders.length} pending order${orders.length !== 1 ? "s" : ""} · ${orders.length} awaiting COD collection`
-              : `${collectedOrders.length} collected order${collectedOrders.length !== 1 ? "s" : ""}`
-            }
-          </div>
-        </s-card>
-      )}
+                return (
+                  <>
+                    {/* Main row */}
+                    <tr
+                      key={order.id}
+                      onClick={() => toggleRow(order.id)}
+                      style={{
+                        cursor: "pointer",
+                        backgroundColor: isExpanded ? "#f6f6f7" : "transparent",
+                        borderBottom: isExpanded ? "none" : "1px solid #f1f2f3",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isExpanded) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#fafafa";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isExpanded) (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "transparent";
+                      }}
+                    >
+                      {/* Order number */}
+                      <td style={{ padding: "14px 16px", fontSize: "13px", fontWeight: "600", color: "#202223" }}>
+                        {order.name}
+                      </td>
+
+                      {/* Date */}
+                      <td style={{ padding: "14px 16px", fontSize: "13px", color: "#6d7175", whiteSpace: "nowrap" }}>
+                        {formatDate(order.createdAt)}
+                      </td>
+
+                      {/* Customer — showing numeric order ID until Protected Customer Data is approved */}
+                      <td style={{ padding: "14px 16px", fontSize: "11px", color: "#6d7175", fontFamily: "monospace" }}>
+                        {order.numericId}
+                      </td>
+
+                      {/* Payment badge */}
+                      <td style={{ padding: "14px 16px" }}>
+                        <Badge status={order.displayFinancialStatus} type="payment" />
+                      </td>
+
+                      {/* Fulfillment badge */}
+                      <td style={{ padding: "14px 16px" }}>
+                        <Badge status={order.displayFulfillmentStatus} type="fulfillment" />
+                      </td>
+
+                      {/* Total */}
+                      <td style={{ padding: "14px 16px", fontSize: "13px", color: "#202223", fontWeight: "500", whiteSpace: "nowrap" }}>
+                        {money}
+                      </td>
+
+                      {/* Action */}
+                      <td style={{ padding: "14px 16px" }} onClick={(e) => e.stopPropagation()}>
+                        {collected ? (
+                          <span style={{ fontSize: "12px", color: "#1a7f37", fontWeight: "600" }}>
+                            ✓ Collected
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => handleMarkCollected(order.id, e)}
+                            disabled={isMarkingThis}
+                            style={{
+                              padding: "6px 12px",
+                              backgroundColor: isMarkingThis ? "#e1e3e5" : "#202223",
+                              color: isMarkingThis ? "#6d7175" : "#ffffff",
+                              border: "none",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              cursor: isMarkingThis ? "not-allowed" : "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {isMarkingThis ? "Saving..." : "Mark collected"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Expanded detail panel */}
+                    {isExpanded && (
+                      <tr key={`${order.id}-detail`} style={{ backgroundColor: "#f6f6f7", borderBottom: "1px solid #e1e3e5" }}>
+                        <td colSpan={7} style={{ padding: "0 16px 16px 16px" }}>
+                          <div style={{
+                            backgroundColor: "#ffffff",
+                            border: "1px solid #e1e3e5",
+                            borderRadius: "8px",
+                            padding: "16px",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: "24px",
+                          }}>
+
+                            {/* Left: order details grid */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: "12px", fontWeight: "700", color: "#202223", marginBottom: "10px" }}>
+                                Order details
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "2px" }}>Order ID</div>
+                                  <div style={{ fontSize: "12px", color: "#202223", fontFamily: "monospace" }}>{order.numericId}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "2px" }}>Order name</div>
+                                  <div style={{ fontSize: "12px", color: "#202223", fontWeight: "600" }}>{order.name}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "2px" }}>Created</div>
+                                  <div style={{ fontSize: "12px", color: "#202223" }}>{formatDate(order.createdAt)}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "2px" }}>Total</div>
+                                  <div style={{ fontSize: "12px", color: "#202223", fontWeight: "600" }}>{money}</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "2px" }}>Payment</div>
+                                  <div><Badge status={order.displayFinancialStatus} type="payment" /></div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "2px" }}>Fulfillment</div>
+                                  <div><Badge status={order.displayFulfillmentStatus} type="fulfillment" /></div>
+                                </div>
+                              </div>
+
+                              {/* Tags */}
+                              {order.tags?.length > 0 && (
+                                <div style={{ marginTop: "12px" }}>
+                                  <div style={{ fontSize: "11px", color: "#6d7175", marginBottom: "4px" }}>Tags</div>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                                    {order.tags.map((tag) => (
+                                      <span key={tag} style={{
+                                        padding: "2px 8px",
+                                        backgroundColor: "#f6f6f7",
+                                        border: "1px solid #e1e3e5",
+                                        borderRadius: "4px",
+                                        fontSize: "11px",
+                                        color: "#202223",
+                                      }}>
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Right: action buttons */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
+                              <button
+                                onClick={(e) => openInShopify(order, e)}
+                                style={{
+                                  padding: "8px 16px",
+                                  backgroundColor: "#ffffff",
+                                  border: "1px solid #c9cccf",
+                                  borderRadius: "6px",
+                                  fontSize: "12px",
+                                  fontWeight: "600",
+                                  cursor: "pointer",
+                                  color: "#202223",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                View in Shopify ↗
+                              </button>
+                              {!collected ? (
+                                <button
+                                  onClick={(e) => handleMarkCollected(order.id, e)}
+                                  disabled={collecting === order.id}
+                                  style={{
+                                    padding: "8px 16px",
+                                    backgroundColor: collecting === order.id ? "#e1e3e5" : "#202223",
+                                    color: collecting === order.id ? "#6d7175" : "#ffffff",
+                                    border: "none",
+                                    borderRadius: "6px",
+                                    fontSize: "12px",
+                                    fontWeight: "600",
+                                    cursor: collecting === order.id ? "not-allowed" : "pointer",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {collecting === order.id ? "Saving..." : "Mark collected"}
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: "12px", color: "#1a7f37", fontWeight: "600", textAlign: "center" }}>
+                                  ✓ Balance collected
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </s-page>
   );
 }
