@@ -7,6 +7,11 @@ export const schema: GadgetModel = {
   type: "gadget/model-schema/v2",
   storageKey: "DataModel-Shopify-Shop",
   fields: {
+    depositRules: {
+      type: "hasMany",
+      children: { model: "depositRule", belongsToField: "shop" },
+      storageKey: "9iuBqt9LL5mt",
+    },
     lockdinBalanceDueReminders: {
       type: "boolean",
       default: true,
